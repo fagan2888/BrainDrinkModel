@@ -5,6 +5,8 @@ Created on Wed Sep 18 17:27:40 2013
 @author: hok1
 """
 
+import numpy as np
+
 states = ('Energetic', 'Awake', 'Normal', 'Tired', 'Sleepy')
 drinks = ('Coffee', 'Tea', 'Coke', 'Decaf', 'Juice', 'Beer', 'Wine')
 
@@ -25,3 +27,34 @@ emission_probabilities = {
 }
 
 initial_probabilities = {'Energetic':0.3, 'Awake':0.2, 'Normal':0.2, 'Tired':0.15, 'Sleepy':0.15}
+
+def give_state(dict_probs, rndnum):
+    cum_prob = 0.0
+    for state in dict_probs.keys():
+        cum_prob += dict_probs[state]
+        if rndnum < cum_prob:
+            return state
+    return dict_probs.keys()[-1]
+
+def simulate_state_sequence(num_steps):
+    rndnums = np.random.uniform(size=num_steps)
+    state_seq = []
+    given_state = give_state(initial_probabilities, rndnums[0])
+    state_seq.append(given_state)
+    for rndnum in rndnums[1:]:
+        given_state = give_state(transition_probabilities[given_state], rndnum)
+        state_seq.append(given_state)    
+    return state_seq
+    
+def simulate_observed_sequence(state_seq):
+    rndnums = np.random.uniform(size=len(state_seq))
+    observed_seq = []
+    for state, rndnum in zip(state_seq, rndnums):
+        observed_seq.append(give_state(emission_probabilities[state], rndnum))
+    return observed_seq
+    
+if __name__ == '__main__':
+    state_seq = simulate_state_sequence(10)
+    observed_seq = simulate_observed_sequence(state_seq)
+    print state_seq
+    print observed_seq
