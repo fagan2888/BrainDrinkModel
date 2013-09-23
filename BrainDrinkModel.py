@@ -53,6 +53,21 @@ def simulate_observed_sequence(state_seq):
         observed_seq.append(give_state(emission_probabilities[state], rndnum))
     return observed_seq
     
+def prob_observed_sequence_forwardcache(observed_seq):
+    matrix = []
+    alphas = {}
+    for state in states:
+        alphas[state] = initial_probabilities[state]*emission_probabilities[state][observed_seq[0]]
+    matrix.append(alphas)
+    for t in range(1, len(observed_seq)):
+        alphas = {}
+        for state in states:
+            alphas[state] = 0.0
+            for previous_state in matrix[t-1]:
+                alphas[state] += matrix[t-1][previous_state]*transition_probabilities[previous_state][state]*emission_probabilities[state][observed_seq[t]]
+        matrix.append(alphas)
+    return sum(matrix[-1].values())
+    
 if __name__ == '__main__':
     state_seq = simulate_state_sequence(10)
     observed_seq = simulate_observed_sequence(state_seq)
