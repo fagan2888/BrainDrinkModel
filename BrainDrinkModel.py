@@ -86,6 +86,29 @@ def prob_observed_sequence_backwardcache(observed_seq):
         prob += matrix[0][state]*initial_probabilities[state]
     return prob
     
+def most_probably_state_viterbi(observed_seq):
+    deltamatrix = []
+    deltas = {}
+    psimatrix = []
+    psis = {}
+    for state in states:
+        deltas[state] = initial_probabilities[state]*emission_probabilities[state][observed_seq[0]]
+        psis[state] = ''
+    deltamatrix.append(deltas)
+    psimatrix.append(psis)
+    for t in range(1, len(observed_seq)):
+        deltas = {}
+        psis = {}
+        for state in states:
+            tuples = [(previous_state, deltamatrix[t-1][previous_state]*transition_probabilities[previous_state][state]*emission_probabilities[state][observed_seq[t]]) for previous_state in deltamatrix[t-1]]
+            psis[state], deltas[state] = max(tuples, key=lambda item: item[1])
+        deltamatrix.append(deltas)
+        psimatrix.append(psis)
+    most_probable_state_seq = [max(deltamatrix[-1].items(), key=lambda item: item[1])[0]]
+    for t in range(len(observed_seq)-1, 0, -1):
+        most_probable_state_seq = [psimatrix[t][most_probable_state_seq[0]]] + most_probable_state_seq
+    return most_probable_state_seq
+    
 if __name__ == '__main__':
     state_seq = simulate_state_sequence(10)
     observed_seq = simulate_observed_sequence(state_seq)
@@ -93,3 +116,4 @@ if __name__ == '__main__':
     print observed_seq
     print prob_observed_sequence_forwardcache(observed_seq)
     print prob_observed_sequence_backwardcache(observed_seq)
+    print most_probably_state_viterbi(observed_seq)
