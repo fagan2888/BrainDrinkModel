@@ -78,16 +78,16 @@ def prob_observed_sequence_backwardcache(observed_seq):
         betas = {}
         for state in states:
             betas[state] = 0.0
-            for subsequent_state in matrix[len(matrix)-1]:
-                betas[state] += matrix[len(matrix)-1][subsequent_state]*transition_probabilities[state][subsequent_state]*emission_probabilities[state][observed_seq[t]]
-        matrix.append(betas)
+            for subsequent_state in matrix[0]:
+                betas[state] += matrix[0][subsequent_state]*transition_probabilities[state][subsequent_state]*emission_probabilities[state][observed_seq[t]]
+        matrix = [betas] + matrix
     prob = 0.0
     for state in states:
-        prob += matrix[-1][state]*initial_probabilities[state]
+        prob += matrix[0][state]*initial_probabilities[state]
     return prob
     
 if __name__ == '__main__':
-    state_seq = simulate_state_sequence(2)
+    state_seq = simulate_state_sequence(10)
     observed_seq = simulate_observed_sequence(state_seq)
     print state_seq
     print observed_seq
