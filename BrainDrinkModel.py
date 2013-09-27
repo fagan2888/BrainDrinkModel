@@ -50,8 +50,8 @@ def simulate_observed_sequence(state_seq):
     rndnums = np.random.uniform(size=len(state_seq))
     return [give_state(emission_probabilities[state], rndnum) 
                        for state, rndnum in zip(state_seq, rndnums)]
-    
-def prob_observed_sequence_forwardcache(observed_seq):
+
+def compute_forward_matrix(observed_seq):
     matrix = []
     alphas = {}
     for state in states:
@@ -62,9 +62,9 @@ def prob_observed_sequence_forwardcache(observed_seq):
         for state in states:
             alphas[state] = sum([matrix[t-1][previous_state]*transition_probabilities[previous_state][state]*emission_probabilities[state][observed_seq[t]] for previous_state in matrix[t-1]])
         matrix.append(alphas)
-    return sum(matrix[-1].values())
-    
-def prob_observed_sequence_backwardcache(observed_seq):
+    return matrix
+
+def compute_backward_matrix(observed_seq):
     matrix = []
     betas = {}
     for state in states:
@@ -75,12 +75,9 @@ def prob_observed_sequence_backwardcache(observed_seq):
         for state in states:
             betas[state] = sum([matrix[0][subsequent_state]*transition_probabilities[state][subsequent_state]*emission_probabilities[state][observed_seq[t]] for subsequent_state in matrix[0]])
         matrix = [betas] + matrix
-    prob = 0.0
-    for state in states:
-        prob += matrix[0][state]*initial_probabilities[state]
-    return prob
-    
-def most_probably_state_viterbi(observed_seq):
+    return matrix
+
+def compute_traceback_matrices(observed_seq):
     deltamatrix = []
     deltas = {}
     psimatrix = []
@@ -98,6 +95,18 @@ def most_probably_state_viterbi(observed_seq):
             psis[state], deltas[state] = max(tuples, key=lambda item: item[1])
         deltamatrix.append(deltas)
         psimatrix.append(psis)
+    return deltamatrix, psimatrix
+
+def prob_observed_sequence_forwardcache(observed_seq):
+    matrix = compute_forward_matrix(observed_seq)
+    return sum(matrix[-1].values())
+    
+def prob_observed_sequence_backwardcache(observed_seq):
+    matrix = compute_backward_matrix(observed_seq)
+    return sum([matrix[0][state]*initial_probabilities[state] for state in states])
+    
+def most_probably_state_viterbi(observed_seq):
+    deltamatrix, psimatrix = compute_traceback_matrices(observed_seq)
     most_probable_state_seq = [max(deltamatrix[-1].items(), key=lambda item: item[1])[0]]
     for t in range(len(observed_seq)-1, 0, -1):
         most_probable_state_seq = [psimatrix[t][most_probable_state_seq[0]]] + most_probable_state_seq
