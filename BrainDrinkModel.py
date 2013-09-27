@@ -110,7 +110,7 @@ def most_probably_state_viterbi(observed_seq):
     return most_probable_state_seq
     
 if __name__ == '__main__':
-    state_seq = simulate_state_sequence(10)
+    state_seq = simulate_state_sequence(30)
     observed_seq = simulate_observed_sequence(state_seq)
     print state_seq
     print observed_seq
