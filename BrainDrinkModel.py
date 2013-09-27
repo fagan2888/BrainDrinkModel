@@ -48,10 +48,8 @@ def simulate_state_sequence(num_steps):
     
 def simulate_observed_sequence(state_seq):
     rndnums = np.random.uniform(size=len(state_seq))
-    observed_seq = []
-    for state, rndnum in zip(state_seq, rndnums):
-        observed_seq.append(give_state(emission_probabilities[state], rndnum))
-    return observed_seq
+    return [give_state(emission_probabilities[state], rndnum) 
+                       for state, rndnum in zip(state_seq, rndnums)]
     
 def prob_observed_sequence_forwardcache(observed_seq):
     matrix = []
@@ -62,9 +60,7 @@ def prob_observed_sequence_forwardcache(observed_seq):
     for t in range(1, len(observed_seq)):
         alphas = {}
         for state in states:
-            alphas[state] = 0.0
-            for previous_state in matrix[t-1]:
-                alphas[state] += matrix[t-1][previous_state]*transition_probabilities[previous_state][state]*emission_probabilities[state][observed_seq[t]]
+            alphas[state] = sum([matrix[t-1][previous_state]*transition_probabilities[previous_state][state]*emission_probabilities[state][observed_seq[t]] for previous_state in matrix[t-1]])
         matrix.append(alphas)
     return sum(matrix[-1].values())
     
@@ -77,9 +73,7 @@ def prob_observed_sequence_backwardcache(observed_seq):
     for t in range(len(observed_seq)-1, -1, -1):
         betas = {}
         for state in states:
-            betas[state] = 0.0
-            for subsequent_state in matrix[0]:
-                betas[state] += matrix[0][subsequent_state]*transition_probabilities[state][subsequent_state]*emission_probabilities[state][observed_seq[t]]
+            betas[state] = sum([matrix[0][subsequent_state]*transition_probabilities[state][subsequent_state]*emission_probabilities[state][observed_seq[t]] for subsequent_state in matrix[0]])
         matrix = [betas] + matrix
     prob = 0.0
     for state in states:
