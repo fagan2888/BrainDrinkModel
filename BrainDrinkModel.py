@@ -36,35 +36,40 @@ def give_state(dict_probs, rndnum):
             return state
     return dict_probs.keys()[-1]
 
-def simulate_state_sequence(num_steps):
+def simulate_state_sequence(num_steps, pi=initial_probabilities,
+                            A=transition_probabilities):
     rndnums = np.random.uniform(size=num_steps)
     state_seq = []
-    given_state = give_state(initial_probabilities, rndnums[0])
+    given_state = give_state(pi, rndnums[0])
     state_seq.append(given_state)
     for rndnum in rndnums[1:]:
-        given_state = give_state(transition_probabilities[given_state], rndnum)
+        given_state = give_state(A[given_state], rndnum)
         state_seq.append(given_state)    
     return state_seq
     
-def simulate_observed_sequence(state_seq):
+def simulate_observed_sequence(state_seq, B=emission_probabilities):
     rndnums = np.random.uniform(size=len(state_seq))
-    return [give_state(emission_probabilities[state], rndnum) 
-                       for state, rndnum in zip(state_seq, rndnums)]
+    return [give_state(B[state], rndnum)  for state, rndnum in zip(state_seq,
+                                                                   rndnums)]
 
-def compute_forward_matrix(observed_seq):
+def compute_forward_matrix(observed_seq, pi=initial_probabilities,
+                           A=transition_probabilities, 
+                           B=emission_probabilities):
     matrix = []
     alphas = {}
     for state in states:
-        alphas[state] = initial_probabilities[state]*emission_probabilities[state][observed_seq[0]]
+        alphas[state] = pi[state]*B[state][observed_seq[0]]
     matrix.append(alphas)
     for t in range(1, len(observed_seq)):
         alphas = {}
         for state in states:
-            alphas[state] = sum([matrix[t-1][previous_state]*transition_probabilities[previous_state][state]*emission_probabilities[state][observed_seq[t]] for previous_state in matrix[t-1]])
+            alphas[state] = sum([matrix[t-1][previous_state]*A[previous_state][state]*B[state][observed_seq[t]] for previous_state in matrix[t-1]])
         matrix.append(alphas)
     return matrix
 
-def compute_backward_matrix(observed_seq):
+def compute_backward_matrix(observed_seq, pi=initial_probabilities,
+                            A=transition_probabilities, 
+                            B=emission_probabilities):
     matrix = []
     betas = {}
     for state in states:
@@ -73,17 +78,19 @@ def compute_backward_matrix(observed_seq):
     for t in range(len(observed_seq)-1, -1, -1):
         betas = {}
         for state in states:
-            betas[state] = sum([matrix[0][subsequent_state]*transition_probabilities[state][subsequent_state]*emission_probabilities[state][observed_seq[t]] for subsequent_state in matrix[0]])
+            betas[state] = sum([matrix[0][subsequent_state]*A[state][subsequent_state]*B[state][observed_seq[t]] for subsequent_state in matrix[0]])
         matrix = [betas] + matrix
     return matrix
 
-def compute_traceback_matrices(observed_seq):
+def compute_traceback_matrices(observed_seq, pi=initial_probabilities,
+                               A=transition_probabilities, 
+                               B=emission_probabilities):
     deltamatrix = []
     deltas = {}
     psimatrix = []
     psis = {}
     for state in states:
-        deltas[state] = initial_probabilities[state]*emission_probabilities[state][observed_seq[0]]
+        deltas[state] = pi[state]*B[state][observed_seq[0]]
         psis[state] = ''
     deltamatrix.append(deltas)
     psimatrix.append(psis)
@@ -91,22 +98,38 @@ def compute_traceback_matrices(observed_seq):
         deltas = {}
         psis = {}
         for state in states:
-            tuples = [(previous_state, deltamatrix[t-1][previous_state]*transition_probabilities[previous_state][state]*emission_probabilities[state][observed_seq[t]]) for previous_state in deltamatrix[t-1]]
+            tuples = [(previous_state, deltamatrix[t-1][previous_state]*A[previous_state][state]*B[state][observed_seq[t]]) for previous_state in deltamatrix[t-1]]
             psis[state], deltas[state] = max(tuples, key=lambda item: item[1])
         deltamatrix.append(deltas)
         psimatrix.append(psis)
     return deltamatrix, psimatrix
 
-def prob_observed_sequence_forwardcache(observed_seq):
-    matrix = compute_forward_matrix(observed_seq)
+def prob_observed_sequence_forwardcache(observed_seq,
+                                        pi=initial_probabilities,
+                                        A=transition_probabilities, 
+                                        B=emission_probabilities):
+    matrix = compute_forward_matrix(observed_seq, pi=initial_probabilities,
+                                    A=transition_probabilities, 
+                                    B=emission_probabilities)
     return sum(matrix[-1].values())
     
-def prob_observed_sequence_backwardcache(observed_seq):
-    matrix = compute_backward_matrix(observed_seq)
-    return sum([matrix[0][state]*initial_probabilities[state] for state in states])
+def prob_observed_sequence_backwardcache(observed_seq,
+                                         pi=initial_probabilities,
+                                         A=transition_probabilities, 
+                                         B=emission_probabilities):
+    matrix = compute_backward_matrix(observed_seq, pi=initial_probabilities,
+                                     A=transition_probabilities, 
+                                     B=emission_probabilities)
+    return sum([matrix[0][state]*pi[state] for state in states])
     
-def most_probably_state_viterbi(observed_seq):
-    deltamatrix, psimatrix = compute_traceback_matrices(observed_seq)
+def most_probably_state_viterbi(observed_seq,
+                                pi=initial_probabilities,
+                                A=transition_probabilities, 
+                                B=emission_probabilities):
+    deltamatrix, psimatrix = compute_traceback_matrices(observed_seq,
+                                                        pi=initial_probabilities,
+                                                        A=transition_probabilities, 
+                                                        B=emission_probabilities)
     most_probable_state_seq = [max(deltamatrix[-1].items(), key=lambda item: item[1])[0]]
     for t in range(len(observed_seq)-1, 0, -1):
         most_probable_state_seq = [psimatrix[t][most_probable_state_seq[0]]] + most_probable_state_seq
