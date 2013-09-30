@@ -6,6 +6,7 @@ Created on Wed Sep 18 17:27:40 2013
 """
 
 import numpy as np
+import itertools
 
 states = ('Energetic', 'Awake', 'Normal', 'Tired', 'Sleepy')
 drinks = ('Coffee', 'Tea', 'Coke', 'Decaf', 'Juice', 'Beer', 'Wine')
@@ -134,6 +135,41 @@ def most_probably_state_viterbi(observed_seq,
     for t in range(len(observed_seq)-1, 0, -1):
         most_probable_state_seq = [psimatrix[t][most_probable_state_seq[0]]] + most_probable_state_seq
     return most_probable_state_seq
+    
+# For EM
+def calculate_gamma_matrices(observed_seq, A, B, pi=initial_probabilities):
+    alpha_matrix = compute_forward_matrix(observed_seq, pi, A, B)
+    beta_matrix = compute_backward_matrix(observed_seq, pi, A, B)
+    gamma_tensor = []
+    for t in range(len(observed_seq)-1):
+        gamma = {}
+        for state1, state2 in itertools.product(states, states):
+            gamma[(state1, state2)] = alpha_matrix[t][state1]*A[state1][state2]*B[state2][observed_seq[t]]*beta_matrix[t][state2]
+        gamma_tensor.append(gamma)
+    return gamma_tensor
+    
+def calculate_MLP(observed_seq, gamma_tensor):
+    gamma_tensor_sum = sum(map(lambda array_dict: sum(array_dict.values()),
+                               gamma_tensor))
+    A = {}
+    for from_state in states:
+        trans_items = {}
+        for to_state in states:
+            trans_items[to_state] = sum(map(lambda item: item[(from_state, to_state)], gamma_tensor)) / gamma_tensor_sum
+        A[from_state] = trans_items
+    
+    B = {}
+    for state in states:
+        trans_items = {}
+        for drink in drinks:
+            trans_items[drink] = 0.
+            for t in range(len(observed_seq)):
+                trans_items[drink] += sum(map(lambda item: item[state], gamma_tensor[t].values())) if drink==observed_seq[t] else 0.
+        B[state] = trans_items
+    return A, B
+    
+def estimate_HMM_parameters(observed_seq):
+    pass
     
 if __name__ == '__main__':
     state_seq = simulate_state_sequence(30)
