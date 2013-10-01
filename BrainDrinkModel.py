@@ -141,7 +141,7 @@ def calculate_gamma_matrices(observed_seq, A, B, pi=initial_probabilities):
     alpha_matrix = compute_forward_matrix(observed_seq, pi, A, B)
     beta_matrix = compute_backward_matrix(observed_seq, pi, A, B)
     gamma_tensor = []
-    for t in range(len(observed_seq)-1):
+    for t in range(len(observed_seq)):
         gamma = {}
         for state1, state2 in itertools.product(states, states):
             gamma[(state1, state2)] = alpha_matrix[t][state1]*A[state1][state2]*B[state2][observed_seq[t]]*beta_matrix[t][state2]
@@ -150,26 +150,72 @@ def calculate_gamma_matrices(observed_seq, A, B, pi=initial_probabilities):
     
 def calculate_MLP(observed_seq, gamma_tensor):
     gamma_tensor_sum = sum(map(lambda array_dict: sum(array_dict.values()),
-                               gamma_tensor))
+                               gamma_tensor))    
+    print gamma_tensor_sum, ' is the total'
     A = {}
     for from_state in states:
         trans_items = {}
         for to_state in states:
             trans_items[to_state] = sum(map(lambda item: item[(from_state, to_state)], gamma_tensor)) / gamma_tensor_sum
         A[from_state] = trans_items
-    
     B = {}
     for state in states:
         trans_items = {}
         for drink in drinks:
             trans_items[drink] = 0.
             for t in range(len(observed_seq)):
-                trans_items[drink] += sum(map(lambda item: item[state], gamma_tensor[t].values())) if drink==observed_seq[t] else 0.
+                trans_items[drink] += sum(gamma_tensor[t].values()) if drink==observed_seq[t] else 0.
         B[state] = trans_items
     return A, B
     
-def estimate_HMM_parameters(observed_seq):
-    pass
+def is_converged(oldA, newA, oldB, newB, tol=1e-7):
+    if oldA=={} or newA=={} or oldB=={} or newB=={}:
+        return False
+    for state1 in oldA.keys():
+        if not (state1 in newA.keys()):
+            return False
+        else:
+            for state2 in oldA[state1].keys():
+                if not newA[state1].has_key(state2):
+                    return False
+                elif abs(oldA[state1][state2]-newA[state1][state2]) > tol:
+                    return False
+    for state in oldB.keys():
+        if not (state in newB.keys()):
+            return False
+        else:
+            for drink in oldB[state].keys():
+                if not newB[state].has_key(drink):
+                    return False
+                elif abs(oldB[state][drink]-newB[state][drink]) > tol:
+                    return False
+    return True
+    
+def estimate_HMM_parameters(observed_seq, tol=1e-7, maxSteps=10000):
+    newA = {}
+    for state1 in states:
+        trans_items = {}
+        probs = np.random.uniform(size=len(states))
+        probs /= sum(probs)
+        for prob, state2 in zip(probs, states):
+            trans_items[state2] = prob
+        newA[state1] = trans_items
+    newB = {}
+    for state in states:
+        trans_items = {}
+        probs = np.random.uniform(size=len(drinks))
+        probs /= sum(probs)
+        for prob, drink in zip(probs, drinks):
+            trans_items[drink] = prob
+        newB[state] = trans_items
+    step = 0
+    oldA = {}
+    oldB = {}
+    while (not is_converged(oldA, newA, oldB, newB)) and step < maxSteps:
+        gamma_matrices = calculate_gamma_matrices(observed_seq, newA, newB)
+        oldA, oldB = newA, newB
+        newA, newB = calculate_MLP(observed_seq, gamma_matrices)
+    return newA, newB, step
     
 if __name__ == '__main__':
     state_seq = simulate_state_sequence(30)
@@ -179,3 +225,7 @@ if __name__ == '__main__':
     print prob_observed_sequence_forwardcache(observed_seq)
     print prob_observed_sequence_backwardcache(observed_seq)
     print most_probably_state_viterbi(observed_seq)
+    A, B, steps = estimate_HMM_parameters(observed_seq)
+    print A
+    print B
+    print steps
