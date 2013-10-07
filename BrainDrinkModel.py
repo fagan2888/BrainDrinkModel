@@ -58,42 +58,54 @@ def compute_forward_matrix(observed_seq, pi=initial_probabilities,
                            A=transition_probabilities, 
                            B=emission_probabilities):
     matrix = []
-    scalingcoefs = []
+    invscalingcoefs = []
     
     alphas = {}
     for state in states:
         alphas[state] = pi[state]*B[state][observed_seq[0]]
-    scalingcoef = sum(alphas.values())
-    scalingcoefs.append(scalingcoef)
+    invscalingcoef = sum(alphas.values())
+    invscalingcoefs.append(invscalingcoef)
     for state in states:
-        alphas[state] /= scalingcoef
+        alphas[state] /= invscalingcoef
     matrix.append(alphas)
     
     for t in range(1, len(observed_seq)):
         alphas = {}
         for state in states:
             alphas[state] = sum([matrix[t-1][previous_state]*A[previous_state][state]*B[state][observed_seq[t]] for previous_state in matrix[t-1]])
-        scalingcoef = sum(alphas.values())
-        scalingcoefs.append(scalingcoef*scalingcoefs[t-1])
+        invscalingcoef = sum(alphas.values())
+        invscalingcoefs.append(invscalingcoef*invscalingcoefs[t-1])
         for state in states:
-            alphas[state] /= scalingcoef
+            alphas[state] /= invscalingcoef
         matrix.append(alphas)
-    return matrix, scalingcoefs
+    return matrix, invscalingcoefs
 
+# handle underflow problem by scaling coefficients
 def compute_backward_matrix(observed_seq, pi=initial_probabilities,
                             A=transition_probabilities, 
                             B=emission_probabilities):
     matrix = []
+    invscalingcoefs = []
+    
     betas = {}
     for state in states:
         betas[state] = 1.0
+    invscalingcoef = sum(betas.values())
+    invscalingcoefs.append(invscalingcoef)
+    for state in states:
+        betas[state] /= invscalingcoef
     matrix.append(betas)
+    
     for t in range(len(observed_seq)-1, -1, -1):
         betas = {}
         for state in states:
             betas[state] = sum([matrix[0][subsequent_state]*A[state][subsequent_state]*B[state][observed_seq[t]] for subsequent_state in matrix[0]])
+        invscalingcoef = sum(betas.values())
+        invscalingcoefs = [invscalingcoef*invscalingcoefs[0]] + invscalingcoefs
+        for state in states:
+            betas[state] /= invscalingcoef
         matrix = [betas] + matrix
-    return matrix
+    return matrix, invscalingcoefs
 
 # using log functions to solve the underflow problems
 def compute_traceback_matrices(observed_seq, pi=initial_probabilities,
@@ -122,20 +134,21 @@ def prob_observed_sequence_forwardcache(observed_seq,
                                         pi=initial_probabilities,
                                         A=transition_probabilities, 
                                         B=emission_probabilities):
-    matrix, scalingcoefs = compute_forward_matrix(observed_seq,
-                                                  pi=initial_probabilities,
-                                                  A=transition_probabilities, 
-                                                  B=emission_probabilities)
-    return sum(matrix[-1].values()) * scalingcoefs[-1]
+    matrix, invscalingcoefs = compute_forward_matrix(observed_seq,
+                                                     pi=initial_probabilities,
+                                                     A=transition_probabilities, 
+                                                     B=emission_probabilities)
+    return sum(matrix[-1].values()) * invscalingcoefs[-1]
     
 def prob_observed_sequence_backwardcache(observed_seq,
                                          pi=initial_probabilities,
                                          A=transition_probabilities, 
                                          B=emission_probabilities):
-    matrix = compute_backward_matrix(observed_seq, pi=initial_probabilities,
-                                     A=transition_probabilities, 
-                                     B=emission_probabilities)
-    return sum([matrix[0][state]*pi[state] for state in states])
+    matrix, invscalingcoefs = compute_backward_matrix(observed_seq,
+                                                      pi=initial_probabilities,
+                                                      A=transition_probabilities, 
+                                                      B=emission_probabilities)
+    return sum([matrix[0][state]*pi[state] for state in states]) * invscalingcoefs[0]
     
 def most_probably_state_viterbi(observed_seq,
                                 pi=initial_probabilities,
