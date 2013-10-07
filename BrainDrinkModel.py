@@ -63,20 +63,20 @@ def compute_forward_matrix(observed_seq, pi=initial_probabilities,
     alphas = {}
     for state in states:
         alphas[state] = pi[state]*B[state][observed_seq[0]]
-    invscalingcoef = sum(alphas.values())
+    invscalingcoef = np.log(sum(alphas.values()))
     invscalingcoefs.append(invscalingcoef)
     for state in states:
-        alphas[state] /= invscalingcoef
+        alphas[state] /= np.exp(invscalingcoef)
     matrix.append(alphas)
     
     for t in range(1, len(observed_seq)):
         alphas = {}
         for state in states:
             alphas[state] = sum([matrix[t-1][previous_state]*A[previous_state][state]*B[state][observed_seq[t]] for previous_state in matrix[t-1]])
-        invscalingcoef = sum(alphas.values())
-        invscalingcoefs.append(invscalingcoef*invscalingcoefs[t-1])
+        invscalingcoef = np.log(sum(alphas.values()))
+        invscalingcoefs.append(invscalingcoef+invscalingcoefs[t-1])
         for state in states:
-            alphas[state] /= invscalingcoef
+            alphas[state] /= np.exp(invscalingcoef)
         matrix.append(alphas)
     return matrix, invscalingcoefs
 
@@ -90,20 +90,20 @@ def compute_backward_matrix(observed_seq, pi=initial_probabilities,
     betas = {}
     for state in states:
         betas[state] = 1.0
-    invscalingcoef = sum(betas.values())
+    invscalingcoef = np.log(sum(betas.values()))
     invscalingcoefs.append(invscalingcoef)
     for state in states:
-        betas[state] /= invscalingcoef
+        betas[state] /= np.exp(invscalingcoef)
     matrix.append(betas)
     
     for t in range(len(observed_seq)-1, -1, -1):
         betas = {}
         for state in states:
             betas[state] = sum([matrix[0][subsequent_state]*A[state][subsequent_state]*B[state][observed_seq[t]] for subsequent_state in matrix[0]])
-        invscalingcoef = sum(betas.values())
-        invscalingcoefs = [invscalingcoef*invscalingcoefs[0]] + invscalingcoefs
+        invscalingcoef = np.log(sum(betas.values()))
+        invscalingcoefs = [invscalingcoef+invscalingcoefs[0]] + invscalingcoefs
         for state in states:
-            betas[state] /= invscalingcoef
+            betas[state] /= np.exp(invscalingcoef)
         matrix = [betas] + matrix
     return matrix, invscalingcoefs
 
@@ -116,7 +116,10 @@ def compute_traceback_matrices(observed_seq, pi=initial_probabilities,
     psimatrix = []
     psis = {}
     for state in states:
-        deltas[state] = np.log(pi[state]) + np.log(B[state][observed_seq[0]])
+        if pi[state]==0 or B[state][observed_seq[0]]==0:
+            deltas[state] = float('-inf')
+        else:
+            deltas[state] = np.log(pi[state]) + np.log(B[state][observed_seq[0]])
         psis[state] = ''
     deltamatrix.append(deltas)
     psimatrix.append(psis)
@@ -124,7 +127,12 @@ def compute_traceback_matrices(observed_seq, pi=initial_probabilities,
         deltas = {}
         psis = {}
         for state in states:
-            tuples = [(previous_state, deltamatrix[t-1][previous_state]+np.log(A[previous_state][state])+np.log(B[state][observed_seq[t]])) for previous_state in deltamatrix[t-1]]
+            tuples = []
+            for previous_state in deltamatrix[t-1]:
+                if A[previous_state][state]==0 or B[state][observed_seq[t]]==0:
+                    tuples.append((previous_state, float('-inf')))
+                else:
+                    tuples.append((previous_state, deltamatrix[t-1][previous_state]+np.log(A[previous_state][state])+np.log(B[state][observed_seq[t]])))
             psis[state], deltas[state] = max(tuples, key=lambda item: item[1])
         deltamatrix.append(deltas)
         psimatrix.append(psis)
@@ -138,7 +146,7 @@ def prob_observed_sequence_forwardcache(observed_seq,
                                                      pi=initial_probabilities,
                                                      A=transition_probabilities, 
                                                      B=emission_probabilities)
-    return sum(matrix[-1].values()) * invscalingcoefs[-1]
+    return sum(matrix[-1].values()) * np.exp(invscalingcoefs[-1])
     
 def prob_observed_sequence_backwardcache(observed_seq,
                                          pi=initial_probabilities,
@@ -148,7 +156,7 @@ def prob_observed_sequence_backwardcache(observed_seq,
                                                       pi=initial_probabilities,
                                                       A=transition_probabilities, 
                                                       B=emission_probabilities)
-    return sum([matrix[0][state]*pi[state] for state in states]) * invscalingcoefs[0]
+    return sum([matrix[0][state]*pi[state] for state in states]) * np.exp(invscalingcoefs[0])
     
 def most_probably_state_viterbi(observed_seq,
                                 pi=initial_probabilities,
@@ -164,26 +172,31 @@ def most_probably_state_viterbi(observed_seq,
     return most_probable_state_seq
     
 # For EM
+# avoild underflow problem using log
 def calculate_gamma_matrices(observed_seq, A, B, pi=initial_probabilities):
-    alpha_matrix = compute_forward_matrix(observed_seq, pi, A, B)
-    beta_matrix = compute_backward_matrix(observed_seq, pi, A, B)
+    alpha_matrix, inv_alphascale = compute_forward_matrix(observed_seq, pi, A, B)
+    beta_matrix, inv_betascale = compute_backward_matrix(observed_seq, pi, A, B)
     gamma_tensor = []
     for t in range(len(observed_seq)):
         gamma = {}
         for state1, state2 in itertools.product(states, states):
-            gamma[(state1, state2)] = alpha_matrix[t][state1]*A[state1][state2]*B[state2][observed_seq[t]]*beta_matrix[t][state2]
+            gamma[(state1, state2)] = np.log(alpha_matrix[t][state1]) if alpha_matrix[t][state1]!=0 else float('-inf')
+            gamma[(state1, state2)] += np.log(A[state1][state2]) if A[state1][state2]!=0 else float('-inf')
+            gamma[(state1, state2)] += np.log(B[state2][observed_seq[t]]) if B[state2][observed_seq[t]]!=0 else float('-inf')
+            gamma[(state1, state2)] += np.log(beta_matrix[t][state2]) if beta_matrix[t][state2]!=0 else float('-inf')
+            gamma[(state1, state2)] += inv_alphascale[-1]+inv_betascale[0]
         gamma_tensor.append(gamma)
     return gamma_tensor
-    
+
+# still underflow problem....    
 def calculate_MLP(observed_seq, gamma_tensor):
-    gamma_tensor_sum = sum(map(lambda array_dict: sum(array_dict.values()),
+    gamma_tensor_sum = sum(map(lambda array_dict: sum(np.exp(array_dict.values())),
                                gamma_tensor))    
-    print gamma_tensor_sum, ' is the total'
     A = {}
     for from_state in states:
         trans_items = {}
         for to_state in states:
-            trans_items[to_state] = sum(map(lambda item: item[(from_state, to_state)], gamma_tensor)) / gamma_tensor_sum
+            trans_items[to_state] = sum(map(lambda item: np.exp(item[(from_state, to_state)]), gamma_tensor)) / gamma_tensor_sum
         A[from_state] = trans_items
     B = {}
     for state in states:
@@ -191,7 +204,7 @@ def calculate_MLP(observed_seq, gamma_tensor):
         for drink in drinks:
             trans_items[drink] = 0.
             for t in range(len(observed_seq)):
-                trans_items[drink] += sum(gamma_tensor[t].values()) if drink==observed_seq[t] else 0.
+                trans_items[drink] += sum(np.exp(gamma_tensor[t].values())) if drink==observed_seq[t] else 0.
         B[state] = trans_items
     return A, B
     
@@ -218,7 +231,7 @@ def is_converged(oldA, newA, oldB, newB, tol=1e-7):
                     return False
     return True
     
-def estimate_HMM_parameters(observed_seq, tol=1e-7, maxSteps=10000):
+def estimate_HMM_parameters(observed_seq, tol=1e-7, maxSteps=10):
     newA = {}
     for state1 in states:
         trans_items = {}
@@ -252,7 +265,7 @@ if __name__ == '__main__':
     print prob_observed_sequence_forwardcache(observed_seq)
     print prob_observed_sequence_backwardcache(observed_seq)
     print most_probably_state_viterbi(observed_seq)
-    #A, B, steps = estimate_HMM_parameters(observed_seq)
-    #print A
-    #print B
-    #print steps
+    A, B, steps = estimate_HMM_parameters(observed_seq)
+    print A
+    print B
+    print steps
