@@ -53,20 +53,32 @@ def simulate_observed_sequence(state_seq, B=emission_probabilities):
     return [give_state(B[state], rndnum)  for state, rndnum in zip(state_seq,
                                                                    rndnums)]
 
+# handle underflow problem by scaling coefficients
 def compute_forward_matrix(observed_seq, pi=initial_probabilities,
                            A=transition_probabilities, 
                            B=emission_probabilities):
     matrix = []
+    scalingcoefs = []
+    
     alphas = {}
     for state in states:
         alphas[state] = pi[state]*B[state][observed_seq[0]]
+    scalingcoef = sum(alphas.values())
+    scalingcoefs.append(scalingcoef)
+    for state in states:
+        alphas[state] /= scalingcoef
     matrix.append(alphas)
+    
     for t in range(1, len(observed_seq)):
         alphas = {}
         for state in states:
             alphas[state] = sum([matrix[t-1][previous_state]*A[previous_state][state]*B[state][observed_seq[t]] for previous_state in matrix[t-1]])
+        scalingcoef = sum(alphas.values())
+        scalingcoefs.append(scalingcoef*scalingcoefs[t-1])
+        for state in states:
+            alphas[state] /= scalingcoef
         matrix.append(alphas)
-    return matrix
+    return matrix, scalingcoefs
 
 def compute_backward_matrix(observed_seq, pi=initial_probabilities,
                             A=transition_probabilities, 
@@ -110,10 +122,11 @@ def prob_observed_sequence_forwardcache(observed_seq,
                                         pi=initial_probabilities,
                                         A=transition_probabilities, 
                                         B=emission_probabilities):
-    matrix = compute_forward_matrix(observed_seq, pi=initial_probabilities,
-                                    A=transition_probabilities, 
-                                    B=emission_probabilities)
-    return sum(matrix[-1].values())
+    matrix, scalingcoefs = compute_forward_matrix(observed_seq,
+                                                  pi=initial_probabilities,
+                                                  A=transition_probabilities, 
+                                                  B=emission_probabilities)
+    return sum(matrix[-1].values()) * scalingcoefs[-1]
     
 def prob_observed_sequence_backwardcache(observed_seq,
                                          pi=initial_probabilities,
@@ -226,7 +239,7 @@ if __name__ == '__main__':
     print prob_observed_sequence_forwardcache(observed_seq)
     print prob_observed_sequence_backwardcache(observed_seq)
     print most_probably_state_viterbi(observed_seq)
-    A, B, steps = estimate_HMM_parameters(observed_seq)
-    print A
-    print B
-    print steps
+    #A, B, steps = estimate_HMM_parameters(observed_seq)
+    #print A
+    #print B
+    #print steps
