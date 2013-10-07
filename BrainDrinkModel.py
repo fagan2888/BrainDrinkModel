@@ -83,6 +83,7 @@ def compute_backward_matrix(observed_seq, pi=initial_probabilities,
         matrix = [betas] + matrix
     return matrix
 
+# using log functions to solve the underflow problems
 def compute_traceback_matrices(observed_seq, pi=initial_probabilities,
                                A=transition_probabilities, 
                                B=emission_probabilities):
@@ -91,7 +92,7 @@ def compute_traceback_matrices(observed_seq, pi=initial_probabilities,
     psimatrix = []
     psis = {}
     for state in states:
-        deltas[state] = pi[state]*B[state][observed_seq[0]]
+        deltas[state] = np.log(pi[state]) + np.log(B[state][observed_seq[0]])
         psis[state] = ''
     deltamatrix.append(deltas)
     psimatrix.append(psis)
@@ -99,7 +100,7 @@ def compute_traceback_matrices(observed_seq, pi=initial_probabilities,
         deltas = {}
         psis = {}
         for state in states:
-            tuples = [(previous_state, deltamatrix[t-1][previous_state]*A[previous_state][state]*B[state][observed_seq[t]]) for previous_state in deltamatrix[t-1]]
+            tuples = [(previous_state, deltamatrix[t-1][previous_state]+np.log(A[previous_state][state])+np.log(B[state][observed_seq[t]])) for previous_state in deltamatrix[t-1]]
             psis[state], deltas[state] = max(tuples, key=lambda item: item[1])
         deltamatrix.append(deltas)
         psimatrix.append(psis)
