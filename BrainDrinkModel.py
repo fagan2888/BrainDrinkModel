@@ -184,19 +184,25 @@ def calculate_gamma_matrices(observed_seq, A, B, pi=initial_probabilities):
             gamma[(state1, state2)] += np.log(A[state1][state2]) if A[state1][state2]!=0 else float('-inf')
             gamma[(state1, state2)] += np.log(B[state2][observed_seq[t]]) if B[state2][observed_seq[t]]!=0 else float('-inf')
             gamma[(state1, state2)] += np.log(beta_matrix[t][state2]) if beta_matrix[t][state2]!=0 else float('-inf')
-            gamma[(state1, state2)] += inv_alphascale[-1]+inv_betascale[0]
+            gamma[(state1, state2)] += inv_alphascale[-1] + inv_betascale[0]
         gamma_tensor.append(gamma)
     return gamma_tensor
 
 # still underflow problem....    
 def calculate_MLP(observed_seq, gamma_tensor):
-    gamma_tensor_sum = sum(map(lambda array_dict: sum(np.exp(array_dict.values())),
-                               gamma_tensor))    
+    gamma_tensor_max = max(map(lambda item: max(item.values()), gamma_tensor))
+    gamma_tensor_sum = sum(map(lambda array_dict: sum(np.exp(np.array(array_dict.values())-gamma_tensor_max)),
+                               gamma_tensor))
+    if raw_input('print? ') == 'y':
+        for gamma_tensor_dict in gamma_tensor:
+            print gamma_tensor_dict
+            print 'gamma_tensor_sum = ', gamma_tensor_sum
     A = {}
     for from_state in states:
         trans_items = {}
         for to_state in states:
-            trans_items[to_state] = sum(map(lambda item: np.exp(item[(from_state, to_state)]), gamma_tensor)) / gamma_tensor_sum
+            trans_items[to_state] = sum(map(lambda item: np.exp(item[(from_state, to_state)]-gamma_tensor_max), gamma_tensor))
+        trans_items[to_state] /= gamma_tensor_sum
         A[from_state] = trans_items
     B = {}
     for state in states:
@@ -204,7 +210,10 @@ def calculate_MLP(observed_seq, gamma_tensor):
         for drink in drinks:
             trans_items[drink] = 0.
             for t in range(len(observed_seq)):
-                trans_items[drink] += sum(np.exp(gamma_tensor[t].values())) if drink==observed_seq[t] else 0.
+                if drink==observed_seq[t]:
+                    for from_state in states:
+                        trans_items[drink] += np.exp(gamma_tensor[t][(from_state, state)]-gamma_tensor_max) 
+            trans_items[drink] /= gamma_tensor_sum
         B[state] = trans_items
     return A, B
     
@@ -255,10 +264,11 @@ def estimate_HMM_parameters(observed_seq, tol=1e-7, maxSteps=10):
         gamma_matrices = calculate_gamma_matrices(observed_seq, newA, newB)
         oldA, oldB = newA, newB
         newA, newB = calculate_MLP(observed_seq, gamma_matrices)
+        step += 1
     return newA, newB, step
     
 if __name__ == '__main__':
-    state_seq = simulate_state_sequence(30)
+    state_seq = simulate_state_sequence(3)
     observed_seq = simulate_observed_sequence(state_seq)
     print state_seq
     print observed_seq
